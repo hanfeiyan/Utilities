@@ -1,17 +1,30 @@
 import sys
 import numpy as np
-
+import json
+# from PyQt5.QtWidgets import (
+#     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+#     QLineEdit, QPushButton, QSpinBox, QTextEdit, QComboBox,
+#     QFileDialog
+# )
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QLineEdit, QPushButton, QSpinBox, QTextEdit, QComboBox
+    QLineEdit, QPushButton, QSpinBox, QTextEdit, QComboBox,
+    QFileDialog, QMainWindow, QAction, QMenuBar
 )
+
 from PyQt5.QtGui import QDoubleValidator
 
-class SpacingCalculator(QWidget):
+class SpacingCalculator(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("d-spacing Calculator")
+        # self.init_ui()
+        # self.init_silicon()
+        self.central = QWidget()
+        self.setCentralWidget(self.central)
+
         self.init_ui()
+        self.init_menu()
         self.init_silicon()
 
     def init_ui(self):
@@ -34,7 +47,8 @@ class SpacingCalculator(QWidget):
         for edit in [self.edita, self.editb, self.editc, self.editA, self.editB, self.editC]:
             edit.setValidator(QDoubleValidator())
 
-        layout = QVBoxLayout(self)
+        # layout = QVBoxLayout(self)
+        layout = QVBoxLayout(self.central)
 
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("a (Å)"))
@@ -87,6 +101,20 @@ class SpacingCalculator(QWidget):
         layout.addWidget(QLabel("Bragg Peaks (hkl, d-spacing, 2θ, allowed):"))
         layout.addWidget(self.peak_output)
 
+        # save_btn = QPushButton("Save to JSON")
+        # save_btn.clicked.connect(self.save_to_json)
+        # layout.addWidget(save_btn)
+    def init_menu(self):
+        menubar = self.menuBar()
+        file_menu = menubar.addMenu("File")
+
+        load_action = QAction("Load from JSON", self)
+        load_action.triggered.connect(self.load_from_json)
+        file_menu.addAction(load_action)
+
+        save_action = QAction("Save to JSON", self)
+        save_action.triggered.connect(self.save_to_json)
+        file_menu.addAction(save_action)
     def init_silicon(self):
         self.edita.setText("5.431")
         self.editb.setText("5.431")
@@ -215,11 +243,6 @@ class SpacingCalculator(QWidget):
                             peak_dict[key] = {"d": d, "hkl": []}
                         peak_dict[key]["hkl"].append((h, k, l))
 
-            # lines = ["hkl\td (Å)\t2θ (°)\tAllowed"]
-            # for twotheta in sorted(peak_dict.keys()):
-            #     d = peak_dict[twotheta]["d"]
-            #     hkl_str = ", ".join([f"({h}{k}{l})" for h, k, l in peak_dict[twotheta]["hkl"]])
-            #     lines.append(f"{hkl_str}\t{d:.4f}\t{twotheta:.2f}\tYes")
             lines = ["hkl\td (Å)\t2θ (°)\tAllowed"]
             for twotheta in sorted(peak_dict.keys()):
                 d = peak_dict[twotheta]["d"]
@@ -233,15 +256,62 @@ class SpacingCalculator(QWidget):
                         # Intermediate hkl in group: leave d and twotheta empty
                         lines.append(f"({h}{k}{l})\t\t\tYes")
             self.peak_output.setPlainText("\n".join(lines))
-        #     lines = ["{:<20s}{:<12s}{:<10s}{}".format("hkl", "d (Å)", "2θ (°)", "Allowed")]
-        #     for twotheta in sorted(peak_dict.keys()):
-        #         d = peak_dict[twotheta]["d"]
-        #         hkl_str = ", ".join([f"({h}{k}{l})" for h, k, l in peak_dict[twotheta]["hkl"]])
-        #         lines.append("{:<20s}{:<12.4f}{:<10.2f}{}".format(hkl_str, d, twotheta, "Yes"))
-        #     self.peak_output.setPlainText("\n".join(lines))
+
         except Exception as e:
             self.peak_output.setText("Error in peak calculation.")
             print("Error:", e)
+    
+    def save_to_json(self):
+        try:
+            data = {
+                "a": self.edita.text(),
+                "b": self.editb.text(),
+                "c": self.editc.text(),
+                "alpha": self.editA.text(),
+                "beta": self.editB.text(),
+                "gamma": self.editC.text(),
+                "h": self.edith.value(),
+                "k": self.editk.value(),
+                "l": self.editl.value(),
+                "energy_keV": self.energy.text(),
+                "max_index": self.max_index.value(),
+                "structure": self.structure.currentText(),
+                "d_spacing": self.spacing.text(),
+                "bragg_peaks": self.peak_output.toPlainText().splitlines()
+            }
+
+            filename, _ = QFileDialog.getSaveFileName(self, "Save JSON", "", "JSON Files (*.json)")
+            if filename:
+                with open(filename, 'w') as f:
+                    json.dump(data, f, indent=4)
+        except Exception as e:
+            print("Error saving JSON:", e)
+
+    def load_from_json(self):
+        try:
+            filename, _ = QFileDialog.getOpenFileName(self, "Load JSON", "", "JSON Files (*.json)")
+            if not filename:
+                return
+            with open(filename, 'r') as f:
+                data = json.load(f)
+
+            self.edita.setText(data.get("a", ""))
+            self.editb.setText(data.get("b", ""))
+            self.editc.setText(data.get("c", ""))
+            self.editA.setText(data.get("alpha", ""))
+            self.editB.setText(data.get("beta", ""))
+            self.editC.setText(data.get("gamma", ""))
+            self.edith.setValue(data.get("h", 0))
+            self.editk.setValue(data.get("k", 0))
+            self.editl.setValue(data.get("l", 0))
+            self.energy.setText(data.get("energy_keV", ""))
+            self.max_index.setValue(data.get("max_index", 1))
+            self.structure.setCurrentText(data.get("structure", "None"))
+            self.spacing.setText(data.get("d_spacing", ""))
+            self.peak_output.setPlainText("\n".join(data.get("bragg_peaks", [])))
+
+        except Exception as e:
+            print("Error loading JSON:", e)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
